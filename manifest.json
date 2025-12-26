@@ -2,7 +2,7 @@
   "name": "AWS プラクティショナー問題集",
   "short_name": "AWS問題集",
   "description": "AWS Cloud Practitioner試験対策問題集",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#232F3E",

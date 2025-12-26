@@ -37,9 +37,11 @@ class QuizApp {
         this.elements.nextBtn.addEventListener('click', () => this.nextQuestion());
         this.elements.restartBtn.addEventListener('click', () => this.restart());
         
-        // Service Worker登録
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
+        // Service Worker登録（HTTPSまたはHTTPでのみ）
+        if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
+            navigator.serviceWorker.register('./sw.js').catch(error => {
+                console.log('Service Worker registration failed:', error);
+            });
         }
     }
 
@@ -298,6 +300,7 @@ class QuizApp {
 
     showError(message) {
         this.elements.loading.innerHTML = `<p style="color: red;">エラー: ${message}</p>`;
+    }
 }
 
 // アプリケーション開始

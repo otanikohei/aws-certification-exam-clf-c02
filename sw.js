@@ -1,12 +1,12 @@
 const CACHE_NAME = 'aws-quiz-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/app.js',
-  '/js/database.js',
-  '/js/markdown.js',
-  '/manifest.json'
+  './',
+  './index.html',
+  './css/style.css',
+  './js/app.js',
+  './js/database.js',
+  './js/markdown.js',
+  './manifest.json'
 ];
 
 self.addEventListener('install', event => {

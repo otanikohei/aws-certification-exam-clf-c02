@@ -176,24 +176,54 @@ class QuizApp {
         location.reload();
     }
 
-    async getMarkdownFiles() {
-        // 既知のマークダウンファイルのリスト
-        // 実際のファイルシステムAPIが使えない場合の代替案
-        const knownFiles = [
-            'iam-basic-concepts.md',
-            'ec2-instance-types.md',
-            's3-storage-classes.md',
-            'ec2-pricing.md',
-            'ec2-security-groups.md',
-            's3-bucket-policies.md',
-            's3-versioning.md',
-            'vpc-basics.md',
-            'vpc-subnets.md',
-            'cloudwatch-basics.md',
-            'cloudtrail-basics.md',
-            'lambda-basics.md',
-            'rds-basics.md'
+    // 開発用：マークダウンファイルの問題を直接追加
+    async addMarkdownQuestions() {
+        const questions = [
+            {
+                id: 'ec2-instance-types',
+                title: 'EC2インスタンスタイプ',
+                content: 'クラウド実践者は災害復旧計画を策定しており、複数の地理的エリア間でデータを複製する予定です。\nこれらの要件を満たすには、AWS クラウドのどのコンポーネントを使用する必要がありますか?',
+                choices: [
+                    'AWS アカウント',
+                    'AWS リージョン',
+                    'アベイラビリティ・ゾーン',
+                    'エッジ・ロケーション'
+                ],
+                correctAnswer: 2,
+                explanation: 'AWS でいうところの「災害」は、データセンターの障害ではなく、東京が沈没するぐらいの大災害を意味します。\nなので、災害復旧計画には、リージョン対策が必要です。\n\nデータセンター -> アベイラビリティ・ゾーンで十分\n地理的エリア -> リージョン対策が必要\n\nリージョンの中にアベイラビリティ・ゾーンがあります。\nエッジロケーションは、アクセスする人に近い場所にあるデータセンターのことで、アベイラビリティ・ゾーンよりもたくさんあります。\n\n2025 年 12 月時点\n- リージョン数: 38\n- アベイラビリティゾーン数: 117\n- エッジロケーション: 700 以上\n\n参考: [AWS グローバルインフラストラクチャ](https://aws.amazon.com/jp/about-aws/global-infrastructure/)'
+            },
+            {
+                id: 'aws-iam-basic-concepts',
+                title: 'AWS IAMの基本概念',
+                content: 'クラウド実践者は災害復旧計画を策定しており、複数の地理的エリア間でデータを複製する予定です。\nこれらの要件を満たすには、AWS クラウドのどのコンポーネントを使用する必要がありますか?',
+                choices: [
+                    'AWS accounts',
+                    'AWS Regions',
+                    'Availability Zones',
+                    'Edge locations'
+                ],
+                correctAnswer: 2,
+                explanation: 'AWS でいう災害復旧は、例えば日本が半分沈むぐらいの大災害を指します。\nなので、災害対策として、**大阪リージョン** とか、**シンガポールリージョン**みたいな、かなり離れた場所にデータを複製する必要があります。'
+            }
         ];
+
+        for (const question of questions) {
+            await this.db.addQuestion(question);
+        }
+        
+        console.log('マークダウン問題を追加しました');
+        location.reload();
+    }
+
+    async getMarkdownFiles() {
+        // 01.md から 65.md までのファイルを検出
+        const knownFiles = [];
+        
+        // 01から65までの番号付きファイルを生成
+        for (let i = 1; i <= 65; i++) {
+            const filename = String(i).padStart(2, '0') + '.md'; // 01.md, 02.md, ... 65.md
+            knownFiles.push(filename);
+        }
         
         const existingFiles = [];
         

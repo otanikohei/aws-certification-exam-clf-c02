@@ -7,6 +7,8 @@ class QuizApp {
         this.incorrectQuestions = [];
         this.correctCount = 0;
         this.isRetryMode = false;
+        this.currentRoundQuestions = []; // 現在のラウンドの問題リスト
+        this.wrongAnswersThisRound = []; // 今回のラウンドで間違えた問題
         
         this.initElements();
         this.bindEvents();
@@ -63,14 +65,11 @@ class QuizApp {
     }
 
     async loadQuestions() {
+        // まずマークダウンファイルから問題を読み込み
+        await this.loadQuestionsFromMarkdown();
+        
         // データベースから問題を読み込み
         this.questions = await this.db.getAllQuestions();
-        
-        // 問題がない場合はマークダウンファイルから読み込み
-        if (this.questions.length === 0) {
-            await this.loadQuestionsFromMarkdown();
-            this.questions = await this.db.getAllQuestions();
-        }
         
         // 進捗を確認して未正解の問題を特定
         const progress = await this.db.getAllProgress();
@@ -83,33 +82,98 @@ class QuizApp {
         );
         
         this.correctCount = correctQuestionIds.length;
+        
+        // 現在のラウンドの問題を設定
+        this.setupCurrentRound();
+    }
+
+    setupCurrentRound() {
+        if (this.incorrectQuestions.length > 0) {
+            // 未正解の問題がある場合は、それらを現在のラウンドに設定
+            this.currentRoundQuestions = [...this.incorrectQuestions];
+            this.isRetryMode = false;
+        } else {
+            // すべて正解済みの場合は完了
+            this.currentRoundQuestions = [];
+        }
+        
+        this.wrongAnswersThisRound = [];
+        this.currentQuestionIndex = 0;
     }
 
     async loadQuestionsFromMarkdown() {
         try {
+            console.log('マークダウンファイルの読み込みを開始...');
+            
             // questionsフォルダ内のマークダウンファイルリストを取得
             const markdownFiles = await this.getMarkdownFiles();
+            console.log('検出されたファイル:', markdownFiles);
+            
+            if (markdownFiles.length === 0) {
+                console.log('マークダウンファイルが見つかりませんでした');
+                return;
+            }
+            
+            // 既存の問題IDを取得
+            const existingQuestions = await this.db.getAllQuestions();
+            const existingIds = existingQuestions.map(q => q.id);
+            console.log('既存の問題ID:', existingIds);
             
             for (const filename of markdownFiles) {
                 try {
+                    console.log(`ファイル ${filename} を読み込み中...`);
                     const response = await fetch(`questions/${filename}`);
+                    console.log(`${filename} のレスポンス:`, response.status, response.ok);
+                    
                     if (response.ok) {
                         const markdownContent = await response.text();
+                        console.log(`${filename} の内容長:`, markdownContent.length);
+                        
                         const question = MarkdownParser.parseQuestion(markdownContent);
+                        console.log(`パースされた問題:`, question);
                         
                         if (question.id && question.title) {
-                            await this.db.addQuestion(question);
-                            console.log(`問題を追加しました: ${question.title}`);
+                            // 既存の問題かチェック
+                            if (existingIds.includes(question.id)) {
+                                console.log(`問題を更新しました: ${question.title}`);
+                                await this.updateExistingQuestion(question);
+                            } else {
+                                console.log(`新しい問題を追加しました: ${question.title}`);
+                                await this.db.addQuestion(question);
+                            }
+                        } else {
+                            console.error(`問題の形式が不正です:`, question);
                         }
                     }
                 } catch (error) {
                     console.error(`ファイル ${filename} の読み込みエラー:`, error);
                 }
             }
+            
+            // 読み込み後の問題数を確認
+            const allQuestions = await this.db.getAllQuestions();
+            console.log('読み込み完了後の問題数:', allQuestions.length);
+            
         } catch (error) {
             console.error('マークダウンファイルの読み込みエラー:', error);
-            // マークダウンファイルが見つからない場合は空のまま続行
         }
+    }
+
+    async updateExistingQuestion(question) {
+        // 既存の問題を更新（進捗情報は保持）
+        const transaction = this.db.db.transaction(['questions'], 'readwrite');
+        const store = transaction.objectStore('questions');
+        return store.put(question);
+    }
+
+    // 開発用：データベースを完全にリセット
+    async resetDatabase() {
+        await this.db.resetProgress();
+        const transaction = this.db.db.transaction(['questions'], 'readwrite');
+        const store = transaction.objectStore('questions');
+        await store.clear();
+        console.log('データベースをリセットしました');
+        location.reload();
     }
 
     async getMarkdownFiles() {
@@ -150,19 +214,24 @@ class QuizApp {
     startQuiz() {
         this.elements.loading.style.display = 'none';
         
-        if (this.incorrectQuestions.length === 0) {
+        if (this.currentRoundQuestions.length === 0) {
             this.showComplete();
             return;
         }
         
         this.elements.quizContainer.style.display = 'block';
-        this.currentQuestionIndex = 0;
         this.updateProgress();
         this.showQuestion();
     }
 
     showQuestion() {
-        const question = this.incorrectQuestions[this.currentQuestionIndex];
+        if (this.currentQuestionIndex >= this.currentRoundQuestions.length) {
+            // 現在のラウンドが終了
+            this.handleRoundComplete();
+            return;
+        }
+        
+        const question = this.currentRoundQuestions[this.currentQuestionIndex];
         
         this.elements.questionTitle.textContent = question.title;
         this.elements.questionContent.innerHTML = MarkdownParser.renderMarkdown(question.content);
@@ -203,7 +272,7 @@ class QuizApp {
         console.log('submitAnswer called');
         console.log('selectedChoice:', this.selectedChoice);
         
-        const question = this.incorrectQuestions[this.currentQuestionIndex];
+        const question = this.currentRoundQuestions[this.currentQuestionIndex];
         console.log('current question:', question);
         
         const isCorrect = this.selectedChoice === question.correctAnswer;
@@ -233,15 +302,28 @@ class QuizApp {
         
         if (isCorrect) {
             this.correctCount++;
-            // 正解した問題を未正解リストから削除
-            this.incorrectQuestions.splice(this.currentQuestionIndex, 1);
-            // インデックスを調整
-            if (this.currentQuestionIndex >= this.incorrectQuestions.length) {
-                this.currentQuestionIndex = 0;
+        } else {
+            // 間違えた問題を記録（重複チェック）
+            if (!this.wrongAnswersThisRound.find(q => q.id === question.id)) {
+                this.wrongAnswersThisRound.push(question);
             }
         }
         
         this.updateProgress();
+    }
+
+    handleRoundComplete() {
+        if (this.wrongAnswersThisRound.length === 0) {
+            // すべて正解した場合は完了
+            this.showComplete();
+        } else {
+            // 間違えた問題で新しいラウンドを開始
+            this.currentRoundQuestions = [...this.wrongAnswersThisRound];
+            this.wrongAnswersThisRound = [];
+            this.currentQuestionIndex = 0;
+            this.isRetryMode = true;
+            this.showQuestion();
+        }
     }
 
     showResult(isCorrect, question) {
@@ -266,11 +348,7 @@ class QuizApp {
     }
 
     nextQuestion() {
-        if (this.incorrectQuestions.length === 0) {
-            this.showComplete();
-            return;
-        }
-        
+        this.currentQuestionIndex++;
         this.elements.submitBtn.style.display = 'block';
         this.showQuestion();
     }
@@ -290,11 +368,12 @@ class QuizApp {
 
     updateProgress() {
         const totalQuestions = this.questions.length;
-        const remaining = this.incorrectQuestions.length;
-        const current = totalQuestions - remaining + 1;
+        const currentRoundTotal = this.currentRoundQuestions.length;
+        const currentPosition = this.currentQuestionIndex + 1;
         
-        this.elements.currentQuestion.textContent = Math.min(current, totalQuestions);
-        this.elements.totalQuestions.textContent = totalQuestions;
+        // 現在の問題番号を表示（現在のラウンド内での位置）
+        this.elements.currentQuestion.textContent = Math.min(currentPosition, currentRoundTotal);
+        this.elements.totalQuestions.textContent = currentRoundTotal;
         this.elements.correctCount.textContent = this.correctCount;
     }
 
@@ -306,5 +385,6 @@ class QuizApp {
 // アプリケーション開始
 document.addEventListener('DOMContentLoaded', () => {
     const app = new QuizApp();
+    window.quizApp = app; // 開発用にグローバルアクセス可能にする
     app.init();
 });

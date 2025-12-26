@@ -66,22 +66,32 @@ class QuizDatabase {
     }
 
     async updateProgress(questionId, isCorrect) {
-        const transaction = this.db.transaction(['progress'], 'readwrite');
-        const store = transaction.objectStore('progress');
-        
-        const existing = await this.getProgress(questionId);
-        const progress = existing || {
-            questionId: questionId,
-            isCorrect: false,
-            attempts: 0,
-            lastAttempt: null
-        };
+        return new Promise(async (resolve, reject) => {
+            try {
+                // 既存の進捗を取得
+                const existing = await this.getProgress(questionId);
+                const progress = existing || {
+                    questionId: questionId,
+                    isCorrect: false,
+                    attempts: 0,
+                    lastAttempt: null
+                };
 
-        progress.attempts++;
-        progress.lastAttempt = new Date();
-        progress.isCorrect = isCorrect;
+                progress.attempts++;
+                progress.lastAttempt = new Date();
+                progress.isCorrect = isCorrect;
 
-        return store.put(progress);
+                // 新しいトランザクションで更新
+                const transaction = this.db.transaction(['progress'], 'readwrite');
+                const store = transaction.objectStore('progress');
+                
+                const request = store.put(progress);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (error) {
+                reject(error);
+            }
+        });
     }
 
     async getAllProgress() {

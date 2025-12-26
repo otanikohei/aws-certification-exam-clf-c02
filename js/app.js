@@ -45,12 +45,18 @@ class QuizApp {
 
     async init() {
         try {
+            console.log('Initializing app...');
             await this.db.init();
+            console.log('Database initialized');
+            
             await this.loadQuestions();
+            console.log('Questions loaded:', this.questions.length);
+            console.log('Incorrect questions:', this.incorrectQuestions.length);
+            
             this.startQuiz();
         } catch (error) {
             console.error('初期化エラー:', error);
-            this.showError('アプリケーションの初期化に失敗しました。');
+            this.showError('アプリケーションの初期化に失敗しました: ' + error.message);
         }
     }
 
@@ -58,9 +64,9 @@ class QuizApp {
         // データベースから問題を読み込み
         this.questions = await this.db.getAllQuestions();
         
-        // 問題がない場合はサンプル問題を追加
+        // 問題がない場合はマークダウンファイルから読み込み
         if (this.questions.length === 0) {
-            await this.loadSampleQuestions();
+            await this.loadQuestionsFromMarkdown();
             this.questions = await this.db.getAllQuestions();
         }
         
@@ -77,39 +83,66 @@ class QuizApp {
         this.correctCount = correctQuestionIds.length;
     }
 
-    async loadSampleQuestions() {
-        const sampleQuestions = [
-            {
-                id: 'aws-ec2-basic',
-                title: 'EC2の基本概念',
-                content: 'Amazon EC2について正しい説明はどれですか？',
-                choices: [
-                    '物理サーバーのみを提供するサービス',
-                    '仮想サーバーインスタンスを提供するサービス',
-                    'データベース専用のサービス',
-                    'ストレージ専用のサービス'
-                ],
-                correctAnswer: 2,
-                explanation: 'Amazon EC2（Elastic Compute Cloud）は、クラウド上で仮想サーバーインスタンスを提供するサービスです。必要に応じてコンピューティング容量をスケールアップ・ダウンできます。'
-            },
-            {
-                id: 'aws-s3-basic',
-                title: 'S3の特徴',
-                content: 'Amazon S3の主な特徴として正しいものはどれですか？',
-                choices: [
-                    'リレーショナルデータベースサービス',
-                    'オブジェクトストレージサービス',
-                    'メッセージキューサービス',
-                    'DNS管理サービス'
-                ],
-                correctAnswer: 2,
-                explanation: 'Amazon S3（Simple Storage Service）は、オブジェクトストレージサービスです。ウェブサイト、アプリケーション、バックアップなど様々な用途でデータを保存できます。'
+    async loadQuestionsFromMarkdown() {
+        try {
+            // questionsフォルダ内のマークダウンファイルリストを取得
+            const markdownFiles = await this.getMarkdownFiles();
+            
+            for (const filename of markdownFiles) {
+                try {
+                    const response = await fetch(`questions/${filename}`);
+                    if (response.ok) {
+                        const markdownContent = await response.text();
+                        const question = MarkdownParser.parseQuestion(markdownContent);
+                        
+                        if (question.id && question.title) {
+                            await this.db.addQuestion(question);
+                            console.log(`問題を追加しました: ${question.title}`);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`ファイル ${filename} の読み込みエラー:`, error);
+                }
             }
-        ];
-
-        for (const question of sampleQuestions) {
-            await this.db.addQuestion(question);
+        } catch (error) {
+            console.error('マークダウンファイルの読み込みエラー:', error);
+            // マークダウンファイルが見つからない場合は空のまま続行
         }
+    }
+
+    async getMarkdownFiles() {
+        // 既知のマークダウンファイルのリスト
+        // 実際のファイルシステムAPIが使えない場合の代替案
+        const knownFiles = [
+            'iam-basic-concepts.md',
+            'ec2-instance-types.md',
+            's3-storage-classes.md',
+            'ec2-pricing.md',
+            'ec2-security-groups.md',
+            's3-bucket-policies.md',
+            's3-versioning.md',
+            'vpc-basics.md',
+            'vpc-subnets.md',
+            'cloudwatch-basics.md',
+            'cloudtrail-basics.md',
+            'lambda-basics.md',
+            'rds-basics.md'
+        ];
+        
+        const existingFiles = [];
+        
+        for (const filename of knownFiles) {
+            try {
+                const response = await fetch(`questions/${filename}`, { method: 'HEAD' });
+                if (response.ok) {
+                    existingFiles.push(filename);
+                }
+            } catch (error) {
+                // ファイルが存在しない場合は無視
+            }
+        }
+        
+        return existingFiles;
     }
 
     startQuiz() {
@@ -149,6 +182,8 @@ class QuizApp {
     }
 
     selectChoice(choiceNumber, buttonElement) {
+        console.log('Choice selected:', choiceNumber);
+        
         // 既存の選択を解除
         document.querySelectorAll('.choice').forEach(btn => {
             btn.classList.remove('selected');
@@ -158,14 +193,27 @@ class QuizApp {
         buttonElement.classList.add('selected');
         this.selectedChoice = choiceNumber;
         this.elements.submitBtn.disabled = false;
+        
+        console.log('Submit button enabled');
     }
 
     async submitAnswer() {
+        console.log('submitAnswer called');
+        console.log('selectedChoice:', this.selectedChoice);
+        
         const question = this.incorrectQuestions[this.currentQuestionIndex];
+        console.log('current question:', question);
+        
         const isCorrect = this.selectedChoice === question.correctAnswer;
+        console.log('isCorrect:', isCorrect);
         
         // 進捗を更新
-        await this.db.updateProgress(question.id, isCorrect);
+        try {
+            await this.db.updateProgress(question.id, isCorrect);
+            console.log('Progress updated successfully');
+        } catch (error) {
+            console.error('Error updating progress:', error);
+        }
         
         // 選択肢の色を更新
         const choices = document.querySelectorAll('.choice');
@@ -195,16 +243,24 @@ class QuizApp {
     }
 
     showResult(isCorrect, question) {
-        this.elements.resultMessage.textContent = isCorrect ? '✅ 正解です！' : '❌ 不正解です';
-        this.elements.resultMessage.className = `result-message ${isCorrect ? 'correct' : 'incorrect'}`;
+        console.log('showResult called:', isCorrect, question);
         
-        this.elements.explanation.innerHTML = `
-            <h3>解説</h3>
-            ${MarkdownParser.renderMarkdown(question.explanation)}
-        `;
-        
-        this.elements.resultSection.style.display = 'block';
-        this.elements.submitBtn.style.display = 'none';
+        try {
+            this.elements.resultMessage.textContent = isCorrect ? '✅ 正解です！' : '❌ 不正解です';
+            this.elements.resultMessage.className = `result-message ${isCorrect ? 'correct' : 'incorrect'}`;
+            
+            this.elements.explanation.innerHTML = `
+                <h3>解説</h3>
+                ${MarkdownParser.renderMarkdown(question.explanation)}
+            `;
+            
+            this.elements.resultSection.style.display = 'block';
+            this.elements.submitBtn.style.display = 'none';
+            
+            console.log('Result displayed successfully');
+        } catch (error) {
+            console.error('Error in showResult:', error);
+        }
     }
 
     nextQuestion() {
@@ -242,7 +298,6 @@ class QuizApp {
 
     showError(message) {
         this.elements.loading.innerHTML = `<p style="color: red;">エラー: ${message}</p>`;
-    }
 }
 
 // アプリケーション開始

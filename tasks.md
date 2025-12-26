@@ -8,14 +8,34 @@
 - [x] 進捗管理（正解数、残り問題数）
 - [x] 間違えた問題の再出題機能
 - [x] レスポンシブデザイン（iPhone Safari対応）
+- [x] マークダウンファイル自動読み込み機能
+- [x] 不要なモーダル機能の削除
+- [x] ファイル命名規則の改善
+
+## 現在の問題ファイル 📁
+- `iam-basic-concepts.md` - IAMの基本概念
+- `ec2-instance-types.md` - EC2インスタンスタイプ
+- `s3-storage-classes.md` - S3ストレージクラス
 
 ## 次のステップ 🔄
 1. **アプリケーションのテスト**
    - ブラウザでindex.htmlを開いて動作確認
    - iPhone Safariでの表示確認
+   - 複数問題の動作確認
 
-2. **PWAアイコンの追加**
-   - 192x192と512x512のアイコン画像を作成
+2. **問題の追加**
+   - questionsフォルダに新しい.mdファイルを追加
+   - ファイル名は具体的な内容を表すように命名（例：`ec2-pricing.md`、`s3-bucket-policies.md`）
+
+## 推奨ファイル命名規則 📝
+- `{サービス名}-{具体的な機能}.md`
+- 例：
+  - `ec2-pricing.md`
+  - `ec2-security-groups.md`
+  - `s3-bucket-policies.md`
+  - `s3-versioning.md`
+  - `vpc-subnets.md`
+  - `lambda-basics.md`
 
 ## あれば便利な機能 💡
 - [ ] 問題カテゴリ別の分類機能

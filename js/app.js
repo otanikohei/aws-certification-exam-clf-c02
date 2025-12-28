@@ -1,14 +1,15 @@
 class QuizApp {
     constructor() {
         this.db = new QuizDatabase();
-        this.questions = [];
+        this.availableQuestionNumbers = []; // 利用可能な問題番号のリスト
         this.currentQuestionIndex = 0;
         this.selectedChoice = null;
-        this.incorrectQuestions = [];
+        this.incorrectQuestionNumbers = []; // 間違えた問題番号
         this.correctCount = 0;
         this.isRetryMode = false;
-        this.currentRoundQuestions = []; // 現在のラウンドの問題リスト
-        this.wrongAnswersThisRound = []; // 今回のラウンドで間違えた問題
+        this.currentRoundQuestionNumbers = []; // 現在のラウンドの問題番号リスト
+        this.wrongAnswersThisRound = []; // 今回のラウンドで間違えた問題番号
+        this.currentQuestion = null; // 現在表示中の問題
         
         this.initElements();
         this.bindEvents();
@@ -53,9 +54,9 @@ class QuizApp {
             await this.db.init();
             console.log('Database initialized');
             
-            await this.loadQuestions();
-            console.log('Questions loaded:', this.questions.length);
-            console.log('Incorrect questions:', this.incorrectQuestions.length);
+            await this.loadAvailableQuestions();
+            console.log('Available questions loaded:', this.availableQuestionNumbers.length);
+            console.log('Incorrect question numbers:', this.incorrectQuestionNumbers.length);
             
             this.startQuiz();
         } catch (error) {
@@ -64,37 +65,94 @@ class QuizApp {
         }
     }
 
-    async loadQuestions() {
-        // まずマークダウンファイルから問題を読み込み
-        await this.loadQuestionsFromMarkdown();
+    async loadAvailableQuestions() {
+        console.log('利用可能な問題を確認中...');
         
-        // データベースから問題を読み込み
-        this.questions = await this.db.getAllQuestions();
+        // 利用可能な問題番号を取得
+        this.availableQuestionNumbers = await this.getAvailableQuestionNumbers();
+        console.log('利用可能な問題番号:', this.availableQuestionNumbers);
         
-        // 進捗を確認して未正解の問題を特定
+        if (this.availableQuestionNumbers.length === 0) {
+            console.log('問題が見つかりませんでした');
+            return;
+        }
+        
+        // 進捗を確認して未正解の問題番号を特定
         const progress = await this.db.getAllProgress();
         const correctQuestionIds = progress
             .filter(p => p.isCorrect)
             .map(p => p.questionId);
         
-        this.incorrectQuestions = this.questions.filter(q => 
-            !correctQuestionIds.includes(q.id)
-        );
+        // 未正解の問題番号を特定
+        this.incorrectQuestionNumbers = this.availableQuestionNumbers.filter(num => {
+            const questionId = this.generateQuestionId(num);
+            return !correctQuestionIds.includes(questionId);
+        });
         
         this.correctCount = correctQuestionIds.length;
+        console.log('未正解の問題番号:', this.incorrectQuestionNumbers);
         
         // 現在のラウンドの問題を設定
         this.setupCurrentRound();
     }
 
+    generateQuestionId(questionNumber) {
+        return `question-${String(questionNumber).padStart(2, '0')}`;
+    }
+
+    async getAvailableQuestionNumbers() {
+        const availableNumbers = [];
+        
+        // 01から65までの番号をチェック
+        for (let i = 1; i <= 65; i++) {
+            try {
+                const filename = String(i).padStart(2, '0') + '.md';
+                const response = await fetch(`questions/${filename}`, { method: 'HEAD' });
+                if (response.ok) {
+                    availableNumbers.push(i);
+                }
+            } catch (error) {
+                // ファイルが存在しない場合は無視
+            }
+        }
+        
+        return availableNumbers;
+    }
+
+    async loadSingleQuestion(questionNumber) {
+        try {
+            const filename = String(questionNumber).padStart(2, '0') + '.md';
+            console.log(`問題 ${questionNumber} を読み込み中...`);
+            
+            const response = await fetch(`questions/${filename}`);
+            if (!response.ok) {
+                throw new Error(`問題 ${questionNumber} の読み込みに失敗しました`);
+            }
+            
+            const markdownContent = await response.text();
+            const question = MarkdownParser.parseQuestion(markdownContent);
+            
+            // 問題IDを設定
+            question.id = this.generateQuestionId(questionNumber);
+            question.questionNumber = questionNumber;
+            
+            console.log(`問題 ${questionNumber} を読み込み完了:`, question.title);
+            return question;
+            
+        } catch (error) {
+            console.error(`問題 ${questionNumber} の読み込みエラー:`, error);
+            throw error;
+        }
+    }
+
     setupCurrentRound() {
-        if (this.incorrectQuestions.length > 0) {
+        if (this.incorrectQuestionNumbers.length > 0) {
             // 未正解の問題がある場合は、それらを現在のラウンドに設定
-            this.currentRoundQuestions = [...this.incorrectQuestions];
+            this.currentRoundQuestionNumbers = [...this.incorrectQuestionNumbers];
             this.isRetryMode = false;
         } else {
             // すべて正解済みの場合は完了
-            this.currentRoundQuestions = [];
+            this.currentRoundQuestionNumbers = [];
         }
         
         this.wrongAnswersThisRound = [];

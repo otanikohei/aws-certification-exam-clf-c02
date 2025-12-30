@@ -410,6 +410,15 @@ class QuizApp {
         const questionNumber = this.currentRoundQuestionNumbers[this.currentQuestionIndex];
         console.log('current question:', question);
         
+        // 選択数のバリデーション
+        const requiredCount = question.isMultipleChoice ? question.correctAnswers.length : 1;
+        const selectedCount = this.selectedChoices.length;
+        
+        if (selectedCount !== requiredCount) {
+            alert(`${requiredCount}つ選択してください（現在${selectedCount}つ選択中）`);
+            return;
+        }
+        
         // 正解判定
         let isCorrect;
         if (question.isMultipleChoice) {

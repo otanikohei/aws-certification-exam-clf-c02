@@ -3,7 +3,7 @@ class QuizApp {
         this.db = new QuizDatabase();
         this.availableQuestionNumbers = []; // 利用可能な問題番号のリスト
         this.currentQuestionIndex = 0;
-        this.selectedChoice = null;
+        this.selectedChoices = []; // 複数選択対応
         this.incorrectQuestionNumbers = []; // 間違えた問題番号
         this.correctCount = 0;
         this.isRetryMode = false;
@@ -18,6 +18,8 @@ class QuizApp {
     initElements() {
         this.elements = {
             loading: document.getElementById('loading'),
+            progressBar: document.getElementById('progress-bar'),
+            loadingStatus: document.getElementById('loading-status'),
             quizContainer: document.getElementById('quiz-container'),
             completeSection: document.getElementById('complete-section'),
             questionTitle: document.getElementById('question-title'),
@@ -102,9 +104,10 @@ class QuizApp {
 
     async getAvailableQuestionNumbers() {
         const availableNumbers = [];
+        const totalToCheck = 65;
         
         // 01から65までの番号をチェック
-        for (let i = 1; i <= 65; i++) {
+        for (let i = 1; i <= totalToCheck; i++) {
             try {
                 const filename = String(i).padStart(2, '0') + '.md';
                 const response = await fetch(`questions/${filename}`, { method: 'HEAD' });
@@ -114,9 +117,22 @@ class QuizApp {
             } catch (error) {
                 // ファイルが存在しない場合は無視
             }
+            
+            // プログレスバーを更新
+            this.updateLoadingProgress(i, totalToCheck);
         }
         
         return availableNumbers;
+    }
+
+    updateLoadingProgress(current, total) {
+        const percent = Math.round((current / total) * 100);
+        if (this.elements.progressBar) {
+            this.elements.progressBar.style.width = `${percent}%`;
+        }
+        if (this.elements.loadingStatus) {
+            this.elements.loadingStatus.textContent = `${current} / ${total} 問`;
+        }
     }
 
     async loadSingleQuestion(questionNumber) {
@@ -333,7 +349,12 @@ class QuizApp {
         
         const question = this.currentQuestion;
         
-        this.elements.questionTitle.textContent = question.title;
+        // 複数選択の場合はタイトルにヒントを追加
+        let titleText = question.title;
+        if (question.isMultipleChoice) {
+            titleText += ` (${question.correctAnswers.length}つ選択)`;
+        }
+        this.elements.questionTitle.textContent = titleText;
         this.elements.questionContent.innerHTML = MarkdownParser.renderMarkdown(question.content);
         
         // 選択肢を表示
@@ -341,42 +362,66 @@ class QuizApp {
         question.choices.forEach((choice, index) => {
             const button = document.createElement('button');
             button.className = 'choice';
-            button.innerHTML = `${index + 1}. ${MarkdownParser.renderMarkdown(choice)}`;
-            button.addEventListener('click', () => this.selectChoice(index + 1, button));
+            button.innerHTML = `${String.fromCharCode(65 + index)}. ${MarkdownParser.renderMarkdown(choice)}`;
+            button.addEventListener('click', () => this.selectChoice(index + 1, button, question.isMultipleChoice));
             this.elements.choices.appendChild(button);
         });
         
         // 結果セクションを非表示
         this.elements.resultSection.style.display = 'none';
         this.elements.submitBtn.disabled = true;
-        this.selectedChoice = null;
+        this.selectedChoices = [];
     }
 
-    selectChoice(choiceNumber, buttonElement) {
-        console.log('Choice selected:', choiceNumber);
+    selectChoice(choiceNumber, buttonElement, isMultipleChoice) {
+        console.log('Choice selected:', choiceNumber, 'Multiple:', isMultipleChoice);
         
-        // 既存の選択を解除
-        document.querySelectorAll('.choice').forEach(btn => {
-            btn.classList.remove('selected');
-        });
+        if (isMultipleChoice) {
+            // 複数選択モード
+            if (this.selectedChoices.includes(choiceNumber)) {
+                // 既に選択されている場合は解除
+                this.selectedChoices = this.selectedChoices.filter(c => c !== choiceNumber);
+                buttonElement.classList.remove('selected');
+            } else {
+                // 新しく選択
+                this.selectedChoices.push(choiceNumber);
+                buttonElement.classList.add('selected');
+            }
+            // 1つ以上選択されていれば決定ボタンを有効化
+            this.elements.submitBtn.disabled = this.selectedChoices.length === 0;
+        } else {
+            // 単一選択モード
+            document.querySelectorAll('.choice').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            buttonElement.classList.add('selected');
+            this.selectedChoices = [choiceNumber];
+            this.elements.submitBtn.disabled = false;
+        }
         
-        // 新しい選択を設定
-        buttonElement.classList.add('selected');
-        this.selectedChoice = choiceNumber;
-        this.elements.submitBtn.disabled = false;
-        
-        console.log('Submit button enabled');
+        console.log('Selected choices:', this.selectedChoices);
     }
 
     async submitAnswer() {
         console.log('submitAnswer called');
-        console.log('selectedChoice:', this.selectedChoice);
+        console.log('selectedChoices:', this.selectedChoices);
         
         const question = this.currentQuestion;
         const questionNumber = this.currentRoundQuestionNumbers[this.currentQuestionIndex];
         console.log('current question:', question);
         
-        const isCorrect = this.selectedChoice === question.correctAnswer;
+        // 正解判定
+        let isCorrect;
+        if (question.isMultipleChoice) {
+            // 複数選択: 選択した回答と正解が完全一致するか
+            const sortedSelected = [...this.selectedChoices].sort();
+            const sortedCorrect = [...question.correctAnswers].sort();
+            isCorrect = sortedSelected.length === sortedCorrect.length &&
+                        sortedSelected.every((val, idx) => val === sortedCorrect[idx]);
+        } else {
+            // 単一選択
+            isCorrect = this.selectedChoices[0] === question.correctAnswer;
+        }
         console.log('isCorrect:', isCorrect);
         
         // 進捗を更新
@@ -389,11 +434,13 @@ class QuizApp {
         
         // 選択肢の色を更新
         const choices = document.querySelectorAll('.choice');
+        const correctAnswers = question.correctAnswers || [question.correctAnswer];
+        
         choices.forEach((choice, index) => {
             const choiceNumber = index + 1;
-            if (choiceNumber === question.correctAnswer) {
+            if (correctAnswers.includes(choiceNumber)) {
                 choice.classList.add('correct');
-            } else if (choiceNumber === this.selectedChoice && !isCorrect) {
+            } else if (this.selectedChoices.includes(choiceNumber) && !correctAnswers.includes(choiceNumber)) {
                 choice.classList.add('incorrect');
             }
         });

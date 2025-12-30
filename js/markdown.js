@@ -6,7 +6,9 @@ class MarkdownParser {
             title: '',
             content: '',
             choices: [],
-            correctAnswer: null,
+            correctAnswer: null,      // 単一選択用（後方互換性）
+            correctAnswers: [],       // 複数選択用
+            isMultipleChoice: false,  // 複数選択問題かどうか
             explanation: ''
         };
 
@@ -38,8 +40,8 @@ class MarkdownParser {
                 continue;
             }
 
-            // 選択肢の検出（- A), - B), - C), - D) 形式）
-            const choiceMatch = trimmedLine.match(/^- ([A-D])\)\s*(.+)$/);
+            // 選択肢の検出（- A), - B), - C), - D), - E) 形式）
+            const choiceMatch = trimmedLine.match(/^- ([A-E])\)\s*(.+)$/);
             if (choiceMatch && currentSection === 'content') {
                 // 選択肢の前までを問題文として保存
                 if (question.content === '' && contentLines.length > 0) {
@@ -50,12 +52,21 @@ class MarkdownParser {
                 continue;
             }
 
-            // 正解の検出（**A** 形式）
+            // 正解の検出
             if (currentSection === 'answer') {
-                const answerMatch = trimmedLine.match(/^\*\*([A-D])\*\*$/);
-                if (answerMatch) {
-                    const answerLetter = answerMatch[1];
-                    question.correctAnswer = answerLetter.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+                // 複数選択: **B** と **E** 形式
+                const multiAnswerMatch = trimmedLine.match(/\*\*([A-E])\*\*/g);
+                if (multiAnswerMatch && multiAnswerMatch.length > 1) {
+                    question.isMultipleChoice = true;
+                    question.correctAnswers = multiAnswerMatch.map(match => {
+                        const letter = match.replace(/\*/g, '');
+                        return letter.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+                    });
+                } else if (multiAnswerMatch && multiAnswerMatch.length === 1) {
+                    // 単一選択: **A** 形式
+                    const letter = multiAnswerMatch[0].replace(/\*/g, '');
+                    question.correctAnswer = letter.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+                    question.correctAnswers = [question.correctAnswer];
                 }
                 continue;
             }

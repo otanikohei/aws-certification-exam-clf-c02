@@ -10,47 +10,76 @@ class MarkdownParser {
             explanation: ''
         };
 
-        let currentSection = '';
+        let currentSection = 'content'; // タイトル後は問題文から開始
         let contentLines = [];
+        let explanationLines = [];
 
         for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
+            const line = lines[i];
+            const trimmedLine = line.trim();
 
-            if (line.startsWith('# ')) {
-                question.title = line.substring(2).trim();
+            // タイトル（# で始まる行）
+            if (trimmedLine.startsWith('# ') && !trimmedLine.startsWith('## ')) {
+                question.title = trimmedLine.substring(2).trim();
                 question.id = this.generateId(question.title);
-            } else if (line === '## 問題') {
-                currentSection = 'question';
-                contentLines = [];
-            } else if (line === '## 選択肢') {
-                if (currentSection === 'question') {
-                    question.content = contentLines.join('\n').trim();
-                }
-                currentSection = 'choices';
-                contentLines = [];
-            } else if (line === '## 正解') {
-                if (currentSection === 'choices') {
-                    this.parseChoices(contentLines, question);
-                }
+                currentSection = 'content';
+                continue;
+            }
+
+            // 正解セクション
+            if (trimmedLine === '## 正解') {
                 currentSection = 'answer';
-                contentLines = [];
-            } else if (line === '## 解説') {
-                if (currentSection === 'answer') {
-                    const answerLine = contentLines.find(l => l.trim() !== '');
-                    if (answerLine) {
-                        question.correctAnswer = parseInt(answerLine.trim());
-                    }
-                }
+                continue;
+            }
+
+            // 解説セクション
+            if (trimmedLine === '## 解説') {
                 currentSection = 'explanation';
-                contentLines = [];
-            } else if (line !== '') {
+                continue;
+            }
+
+            // 選択肢の検出（- A), - B), - C), - D) 形式）
+            const choiceMatch = trimmedLine.match(/^- ([A-D])\)\s*(.+)$/);
+            if (choiceMatch && currentSection === 'content') {
+                // 選択肢の前までを問題文として保存
+                if (question.content === '' && contentLines.length > 0) {
+                    question.content = contentLines.join('\n').trim();
+                    contentLines = [];
+                }
+                question.choices.push(choiceMatch[2]);
+                continue;
+            }
+
+            // 正解の検出（**A** 形式）
+            if (currentSection === 'answer') {
+                const answerMatch = trimmedLine.match(/^\*\*([A-D])\*\*$/);
+                if (answerMatch) {
+                    const answerLetter = answerMatch[1];
+                    question.correctAnswer = answerLetter.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+                }
+                continue;
+            }
+
+            // 解説セクションの内容を収集
+            if (currentSection === 'explanation') {
+                explanationLines.push(line);
+                continue;
+            }
+
+            // 問題文の収集
+            if (currentSection === 'content' && question.choices.length === 0) {
                 contentLines.push(line);
             }
         }
 
-        // 最後のセクション（解説）を処理
-        if (currentSection === 'explanation') {
-            question.explanation = contentLines.join('\n').trim();
+        // 問題文が設定されていない場合
+        if (question.content === '' && contentLines.length > 0) {
+            question.content = contentLines.join('\n').trim();
+        }
+
+        // 解説を設定
+        if (explanationLines.length > 0) {
+            question.explanation = explanationLines.join('\n').trim();
         }
 
         return question;
@@ -59,8 +88,12 @@ class MarkdownParser {
     static parseChoices(lines, question) {
         for (const line of lines) {
             const trimmed = line.trim();
+            // 数字形式（1. ）または A) 形式に対応
             if (trimmed.match(/^\d+\.\s/)) {
                 const choiceText = trimmed.substring(trimmed.indexOf('.') + 1).trim();
+                question.choices.push(choiceText);
+            } else if (trimmed.match(/^[A-D]\)\s/)) {
+                const choiceText = trimmed.substring(trimmed.indexOf(')') + 1).trim();
                 question.choices.push(choiceText);
             }
         }

@@ -302,7 +302,7 @@ class QuizApp {
     startQuiz() {
         this.elements.loading.style.display = 'none';
         
-        if (this.currentRoundQuestions.length === 0) {
+        if (this.currentRoundQuestionNumbers.length === 0) {
             this.showComplete();
             return;
         }
@@ -312,14 +312,26 @@ class QuizApp {
         this.showQuestion();
     }
 
-    showQuestion() {
-        if (this.currentQuestionIndex >= this.currentRoundQuestions.length) {
+    async showQuestion() {
+        if (this.currentQuestionIndex >= this.currentRoundQuestionNumbers.length) {
             // 現在のラウンドが終了
             this.handleRoundComplete();
             return;
         }
         
-        const question = this.currentRoundQuestions[this.currentQuestionIndex];
+        // 現在の問題番号を取得して読み込み
+        const questionNumber = this.currentRoundQuestionNumbers[this.currentQuestionIndex];
+        
+        try {
+            this.currentQuestion = await this.loadSingleQuestion(questionNumber);
+        } catch (error) {
+            console.error('問題の読み込みに失敗:', error);
+            this.currentQuestionIndex++;
+            this.showQuestion();
+            return;
+        }
+        
+        const question = this.currentQuestion;
         
         this.elements.questionTitle.textContent = question.title;
         this.elements.questionContent.innerHTML = MarkdownParser.renderMarkdown(question.content);
@@ -360,7 +372,8 @@ class QuizApp {
         console.log('submitAnswer called');
         console.log('selectedChoice:', this.selectedChoice);
         
-        const question = this.currentRoundQuestions[this.currentQuestionIndex];
+        const question = this.currentQuestion;
+        const questionNumber = this.currentRoundQuestionNumbers[this.currentQuestionIndex];
         console.log('current question:', question);
         
         const isCorrect = this.selectedChoice === question.correctAnswer;
@@ -391,9 +404,9 @@ class QuizApp {
         if (isCorrect) {
             this.correctCount++;
         } else {
-            // 間違えた問題を記録（重複チェック）
-            if (!this.wrongAnswersThisRound.find(q => q.id === question.id)) {
-                this.wrongAnswersThisRound.push(question);
+            // 間違えた問題番号を記録（重複チェック）
+            if (!this.wrongAnswersThisRound.includes(questionNumber)) {
+                this.wrongAnswersThisRound.push(questionNumber);
             }
         }
         
@@ -405,11 +418,12 @@ class QuizApp {
             // すべて正解した場合は完了
             this.showComplete();
         } else {
-            // 間違えた問題で新しいラウンドを開始
-            this.currentRoundQuestions = [...this.wrongAnswersThisRound];
+            // 間違えた問題番号で新しいラウンドを開始
+            this.currentRoundQuestionNumbers = [...this.wrongAnswersThisRound];
             this.wrongAnswersThisRound = [];
             this.currentQuestionIndex = 0;
             this.isRetryMode = true;
+            this.updateProgress();
             this.showQuestion();
         }
     }
@@ -449,14 +463,14 @@ class QuizApp {
     async restart() {
         await this.db.resetProgress();
         this.correctCount = 0;
-        await this.loadQuestions();
+        await this.loadAvailableQuestions();
         this.elements.completeSection.style.display = 'none';
         this.startQuiz();
     }
 
     updateProgress() {
-        const totalQuestions = this.questions.length;
-        const currentRoundTotal = this.currentRoundQuestions.length;
+        const totalQuestions = this.availableQuestionNumbers.length;
+        const currentRoundTotal = this.currentRoundQuestionNumbers.length;
         const currentPosition = this.currentQuestionIndex + 1;
         
         // 現在の問題番号を表示（現在のラウンド内での位置）

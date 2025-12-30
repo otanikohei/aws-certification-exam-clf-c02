@@ -76,14 +76,49 @@ class MarkdownParser {
     static renderMarkdown(text) {
         if (!text) return '';
 
+        // コードブロックの処理（```で囲まれた部分）
+        text = text.replace(/```([^`]*?)```/gs, '<pre><code>$1</code></pre>');
+        
+        // インラインコードの処理（`で囲まれた部分）
+        text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // 見出しの処理（### → h5, ## → h4 など）
+        text = text.replace(/^#### (.+)$/gm, '<h6>$1</h6>');
+        text = text.replace(/^### (.+)$/gm, '<h5>$1</h5>');
+        text = text.replace(/^## (.+)$/gm, '<h4>$1</h4>');
+        
+        // 太字の処理（**text** または __text__）
+        text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        
+        // 斜体の処理（*text* または _text_）
+        text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
+        
         // 画像の処理
         text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
         
         // リンクの処理
         text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
         
-        // 改行の処理
+        // リストの処理（- で始まる行）
+        text = text.replace(/^- (.+)$/gm, '<li>$1</li>');
+        text = text.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+        
+        // 番号付きリストの処理
+        text = text.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+        
+        // 水平線の処理
+        text = text.replace(/^---$/gm, '<hr>');
+        
+        // 改行の処理（連続する改行は段落として扱う）
+        text = text.replace(/\n\n/g, '</p><p>');
         text = text.replace(/\n/g, '<br>');
+        
+        // 段落で囲む
+        if (!text.startsWith('<')) {
+            text = '<p>' + text + '</p>';
+        }
         
         return text;
     }

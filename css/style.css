@@ -253,3 +253,79 @@ body {
         font-size: 0.8rem;
     }
 }
+
+
+/* マークダウン要素のスタイル */
+.explanation h4,
+.explanation h5,
+.explanation h6,
+.question-content h4,
+.question-content h5,
+.question-content h6 {
+    color: #232F3E;
+    margin: 1rem 0 0.5rem 0;
+}
+
+.explanation h4 { font-size: 1.1rem; }
+.explanation h5 { font-size: 1rem; }
+.explanation h6 { font-size: 0.95rem; }
+
+.explanation ul,
+.question-content ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.explanation li,
+.question-content li {
+    margin: 0.3rem 0;
+}
+
+.explanation code,
+.question-content code {
+    background-color: #f0f0f0;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+}
+
+.explanation pre,
+.question-content pre {
+    background-color: #2d2d2d;
+    color: #f8f8f2;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.explanation pre code,
+.question-content pre code {
+    background-color: transparent;
+    padding: 0;
+    color: inherit;
+}
+
+.explanation strong,
+.question-content strong {
+    color: #232F3E;
+    font-weight: 600;
+}
+
+.explanation em,
+.question-content em {
+    font-style: italic;
+}
+
+.explanation hr,
+.question-content hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 1rem 0;
+}
+
+.explanation p,
+.question-content p {
+    margin: 0.5rem 0;
+}

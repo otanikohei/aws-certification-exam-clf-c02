@@ -42,11 +42,45 @@ class QuizApp {
         this.elements.nextBtn.addEventListener('click', () => this.nextQuestion());
         this.elements.restartBtn.addEventListener('click', () => this.restart());
         
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+        
         // Service Worker登録（HTTPSまたはHTTPでのみ）
         if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
             navigator.serviceWorker.register('./sw.js').catch(error => {
                 console.log('Service Worker registration failed:', error);
             });
+        }
+    }
+
+    handleKeyPress(e) {
+        // クイズ画面が表示されていない場合は無視
+        if (this.elements.quizContainer.style.display === 'none') return;
+        
+        const key = e.key.toUpperCase();
+        
+        // A〜Eキーで選択肢を選択
+        if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
+            const choiceIndex = key.charCodeAt(0) - 'A'.charCodeAt(0);
+            const choiceButtons = document.querySelectorAll('.choice');
+            
+            if (choiceIndex < choiceButtons.length) {
+                const button = choiceButtons[choiceIndex];
+                const choiceNumber = choiceIndex + 1;
+                const isMultiple = this.currentQuestion?.isMultipleChoice || false;
+                this.selectChoice(choiceNumber, button, isMultiple);
+            }
+        }
+        
+        // Enterキーで決定または次へ
+        if (e.key === 'Enter') {
+            if (this.elements.resultSection.style.display !== 'none') {
+                // 結果表示中なら次の問題へ
+                this.nextQuestion();
+            } else if (!this.elements.submitBtn.disabled) {
+                // 選択済みなら決定
+                this.submitAnswer();
+            }
         }
     }
 
